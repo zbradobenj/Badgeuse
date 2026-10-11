@@ -73,6 +73,8 @@ dialog::backdrop{background:rgba(0,0,0,.4);-webkit-backdrop-filter:blur(4px);bac
 .ban{background:color-mix(in srgb,var(--bl) 12%,var(--card))}
 .ban b{display:block;margin-bottom:12px;font-weight:600}
 textarea{width:100%;font-size:15px;padding:11px 12px;border-radius:10px;border:0;background:var(--fill);color:var(--tx);font-family:inherit;resize:none}
+.xl1{display:flex;justify-content:space-between;gap:10px;font-weight:600;font-size:16px}
+.xa{font-variant-numeric:tabular-nums;color:var(--ac);white-space:nowrap}
 .hide{display:none}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -143,9 +145,31 @@ textarea{width:100%;font-size:15px;padding:11px 12px;border-radius:10px;border:0
   <input type="file" id="bkFile" accept=".json,application/json" class="hide">
 </section>
 
+<section id="p3" class="hide">
+  <div class="nav"><button id="prev3">‹</button><b id="mname3"></b><button id="next3">›</button></div>
+  <div class="tiles">
+    <div class="tile"><b id="xH">0h00</b><span>Heures</span></div>
+    <div class="tile o"><b id="xT">0 €</b><span>Total net</span></div>
+    <div class="tile"><b id="xN">0</b><span>Extras</span></div>
+  </div>
+  <div class="card">
+    <div id="xrows"></div>
+    <div class="empty hide" id="xempty">Aucun extra ce mois-ci</div>
+    <p class="hint">Touche une ligne pour la modifier · Glisse vers la gauche pour la supprimer</p>
+  </div>
+  <button class="btn" id="xadd" style="width:100%">+ Ajouter un extra</button>
+
+  <div class="gh" style="margin-top:24px">Récap des extras</div>
+  <div class="card">
+    <div class="pair"><button class="btn fl" id="xPdf">Partager le PDF</button><button class="btn fl" id="xMail">Envoyer par mail</button></div>
+    <p class="info" id="xinfo"></p>
+  </div>
+</section>
+
 <nav class="tabs">
   <button id="t1" class="on"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Badger</button>
   <button id="t2"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>Heures</button>
+  <button id="t3"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Extra</button>
 </nav>
 
 <dialog id="dlg">
@@ -157,6 +181,19 @@ textarea{width:100%;font-size:15px;padding:11px 12px;border-radius:10px;border:0
   </div>
   <label for="ep">Pause déduite</label><select id="ep"></select>
   <div class="acts"><button class="c" id="cancel">Annuler</button><button class="s" id="save">Enregistrer</button></div>
+</dialog>
+
+<dialog id="xdlg">
+  <b id="xtitle">Ajouter un extra</b>
+  <label for="xd">Date</label><input type="date" id="xd">
+  <div class="two">
+    <div><label for="xs">Début</label><input type="time" id="xs"></div>
+    <div><label for="xe">Fin</label><input type="time" id="xe"></div>
+  </div>
+  <label for="xp">Pause (déduite)</label><select id="xp"></select>
+  <label for="xw">Pour qui ?</label><input type="text" id="xw" placeholder="Nom, lieu, client…">
+  <label for="xr">Taux horaire net (€/h)</label><input type="number" id="xr" inputmode="decimal" step="0.01" min="0">
+  <div class="acts"><button class="c" id="xcancel">Annuler</button><button class="s" id="xsave">Enregistrer</button></div>
 </dialog>
 
 <dialog id="rdlg">
@@ -174,9 +211,9 @@ textarea{width:100%;font-size:15px;padding:11px 12px;border-radius:10px;border:0
 
 <script>
 const $=id=>document.getElementById(id);
-let S={entries:[],email:'',rem:true,sent:{},mode:'near',tpl:{on:true,s:'05:30',e:'14:30',p:60}};
+let S={entries:[],extras:[],rate:0,email:'',rem:true,sent:{},mode:'near',tpl:{on:true,s:'05:30',e:'14:30',p:60}};
 try{const r=localStorage.getItem('badgeuse');if(r)S=Object.assign(S,JSON.parse(r))}catch(e){}
-S.sent=S.sent||{};
+S.sent=S.sent||{};S.extras=S.extras||[];
 S.tpl=Object.assign({on:true,s:'05:30',e:'14:30',p:60},S.tpl);
 S.entries.forEach(x=>{if(x.p==null)x.p=S.tpl.on?S.tpl.p:0});
 const save=()=>{try{localStorage.setItem('badgeuse',JSON.stringify(S))}catch(e){}};
@@ -247,6 +284,7 @@ function render(){
   $('sNet').textContent=fm(net);$('sSup').textContent=S.tpl.on?fm(sup):'–';$('sDays').textContent=days.size;
   $('addTpl').classList.toggle('hide',!S.tpl.on);
   renderRc();
+  renderX();
   $('tpOn').checked=S.tpl.on;$('tpS').value=S.tpl.s;$('tpE').value=S.tpl.e;
   $('tpP').innerHTML=pOpts(S.tpl.p);
   $('tpInfo').textContent=S.tpl.on?`Journée type : ${S.tpl.s} → ${S.tpl.e}, pause ${S.tpl.p} min déduite = ${fm(stdNet())} nettes. Au-delà de ${fm(stdNet())} nettes dans la journée, ce sont des heures supplémentaires.`:'Modèle désactivé : aucune heure supplémentaire calculée.';
@@ -304,10 +342,10 @@ function endSwipe(cancel){
   s.row.style.transition='transform .2s';
   if(!cancel&&s.on&&s.dx<-90){
     s.row.style.transform='translateX(-100px)';
-    const en=S.entries.find(z=>z.id===s.id);
+    const en=(s.ex?S.extras:S.entries).find(z=>z.id===s.id);
     const lbl=en?new Date(en.s).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'}):'';
     ask('Supprimer la ligne du '+lbl+' ?','Supprimer').then(ok=>{
-      if(ok){S.entries=S.entries.filter(z=>z.id!==s.id);save();tick();render();}
+      if(ok){if(s.ex)S.extras=S.extras.filter(z=>z.id!==s.id);else S.entries=S.entries.filter(z=>z.id!==s.id);save();tick();render();}
       else s.row.style.transform='';
     });
   }else s.row.style.transform='';
@@ -393,14 +431,26 @@ $('shPdf').onclick=async()=>{
   }
   info("Le partage de fichier n'est pas disponible dans ce navigateur. Utilise « Envoyer par mail » : le tableau sera dans le message.");
 };
-$('shMail').onclick=()=>{
+$('shMail').onclick=async()=>{
   if(!S.email||!S.email.includes('@')){info("Enregistre d'abord une adresse e-mail valide.");return}
   const D=recapData(vY(),vM()),L=mLabel(vY(),vM());
-  let b='Récapitulatif des heures - '+L+'\n\n'+'Date | Début | Fin | Pause | Net | Sup.\n';
+  const F='font-family:-apple-system,Helvetica,Arial,sans-serif;';
+  const th='padding:8px 12px;background:#f2f2f7;border-bottom:1px solid #c7c7cc;text-align:center;font-weight:600';
+  const td='padding:7px 12px;border-bottom:1px solid #e5e5ea;text-align:center';
+  const tt=td+';font-weight:700;border-top:2px solid #000';
+  let h='<p style="'+F+'font-size:16px"><b>Récapitulatif des heures - '+L+'</b></p><table style="border-collapse:collapse;'+F+'font-size:14px"><tr>'+['Date','Début','Fin','Pause','Net','Heures sup.'].map(x=>'<th style="'+th+'">'+x+'</th>').join('')+'</tr>';
+  D.rows.forEach(r=>{h+='<tr>'+r.map((c,i)=>'<td style="'+td+(i==4?';font-weight:600':'')+(i==5&&c!=='-'?';color:#d97706;font-weight:600':'')+'">'+c+'</td>').join('')+'</tr>'});
+  h+='<tr><td style="'+tt+'">Total</td><td style="'+tt+'" colspan="3">'+D.days+' jour(s)</td><td style="'+tt+'">'+fm(D.net)+'</td><td style="'+tt+'">'+(S.tpl.on?fm(D.sup):'-')+'</td></tr></table>';
+  let b='Récapitulatif des heures - '+L+'\n\nDate | Début | Fin | Pause | Net | Sup.\n';
   D.rows.forEach(r=>b+=r.join(' | ')+'\n');
   b+='\nTotal : '+D.days+' jour(s) - '+fm(D.net)+' nettes'+(S.tpl.on?' - '+fm(D.sup)+' sup.':'')+'\n';
+  const rich=typeof ClipboardItem!=='undefined'&&navigator.clipboard&&navigator.clipboard.write;
+  const ok=await ask(rich?'Le tableau va être copié. Une fois dans Mail, touche le message, puis choisis « Coller ».':'Le tableau sera écrit en texte dans le message.','Ouvrir Mail');
+  if(!ok)return;
+  let used=false;
+  if(rich){try{navigator.clipboard.write([new ClipboardItem({'text/html':new Blob([h],{type:'text/html'}),'text/plain':new Blob([b],{type:'text/plain'})})]);used=true}catch(e){}}
   markSent();
-  try{location.href='mailto:'+S.email+'?subject='+encodeURIComponent('Récap heures '+L)+'&body='+encodeURIComponent(b)}catch(e){info("Impossible d'ouvrir l'app Mail ici.")}
+  try{location.href='mailto:'+S.email+'?subject='+encodeURIComponent('Récap heures '+L)+'&body='+encodeURIComponent(used?'':b)}catch(e){info("Impossible d'ouvrir l'app Mail ici.")}
 };
 $('mail').onchange=e=>{S.email=e.target.value.trim();save();renderRc()};
 $('rem').onchange=e=>{S.rem=e.target.checked;save();renderBan()};
@@ -427,6 +477,118 @@ function renderRc(){
   $('rinfo').textContent='Récap de '+mLabel(vY(),vM()).toLowerCase()+'. Un envoi 100 % automatique est impossible depuis une page web : l\'app te le propose à la fin du mois et tu valides en un geste.';
   renderBan();
 }
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const eur=n=>n.toLocaleString('fr-FR',{style:'currency',currency:'EUR'});
+const xmin=x=>Math.max(0,Math.round((x.e-x.s)/60000)-(x.p||0));
+const xamt=x=>xmin(x)/60*(x.r||0);
+let xEdit=null;
+function renderX(){
+  const y=view.getFullYear(),m=view.getMonth();
+  $('mname3').textContent=mLabel(y,m);
+  const list=S.extras.filter(x=>{const d=new Date(x.s);return d.getFullYear()==y&&d.getMonth()==m}).sort((a,b)=>a.s-b.s);
+  let mins=0,tot=0,h='';
+  list.forEach(x=>{
+    mins+=xmin(x);tot+=xamt(x);
+    const dd=new Date(x.s).toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'});
+    h+=`<div class="item" data-id="${x.id}"><div class="delbg">Supprimer</div><div class="row" data-xid="${x.id}"><div class="xl1"><span>${esc(x.d||'Sans description')}</span><span class="xa">${eur(xamt(x))}</span></div><div class="l2"><span>${dd} · ${hm(x.s)}-${hm(x.e)}${x.p?' · pause '+x.p+' min':''} · ${fm(xmin(x))} × ${(x.r||0).toLocaleString('fr-FR')} €/h</span></div></div></div>`;
+  });
+  $('xrows').innerHTML=h;
+  $('xempty').classList.toggle('hide',list.length>0);
+  $('xH').textContent=fm(mins);$('xT').textContent=eur(tot);$('xN').textContent=list.length;
+  $('xinfo').textContent='Récap de '+mLabel(y,m).toLowerCase()+'. '+(S.email?'Adresse : '+S.email+' (modifiable dans l\'onglet Heures).':"Aucune adresse enregistrée : ajoute-la dans l'onglet Heures.");
+}
+function openX(id){
+  xEdit=id;const x=id!=null?S.extras.find(z=>z.id===id):null;
+  $('xtitle').textContent=x?"Modifier l'extra":'Ajouter un extra';
+  if(x){$('xd').value=ymd(x.s);$('xs').value=hm(x.s);$('xe').value=hm(x.e);$('xw').value=x.d||'';$('xr').value=x.r||''}
+  else{
+    const n=new Date(),same=n.getFullYear()==view.getFullYear()&&n.getMonth()==view.getMonth();
+    $('xd').value=same?ymd(n.getTime()):ymd(view.getTime());
+    $('xs').value='18:00';$('xe').value='23:00';$('xw').value='';$('xr').value=S.rate||'';
+  }
+  $('xp').innerHTML=pOpts(x?(x.p||0):(S.xp||0));
+  $('xdlg').showModal();
+}
+$('xadd').onclick=()=>openX(null);
+$('xcancel').onclick=()=>$('xdlg').close();
+$('xsave').onclick=async()=>{
+  const d=$('xd').value,a=$('xs').value,b=$('xe').value;
+  if(!d||!a||!b){await info('Indique la date, le début et la fin.');return}
+  const s=new Date(d+'T'+a).getTime();let e=new Date(d+'T'+b).getTime();
+  if(e<s)e+=864e5;
+  if(e===s){await info('Le début et la fin sont identiques.');return}
+  const r=parseFloat(String($('xr').value).replace(',','.'))||0,w=$('xw').value.trim(),pa=+$('xp').value;
+  if(pa>=Math.round((e-s)/60000)){await info('La pause est plus longue que la durée travaillée.');return}
+  if(xEdit==null)S.extras.push({id:Date.now(),s,e,d:w,r,p:pa});
+  else Object.assign(S.extras.find(z=>z.id===xEdit),{s,e,d:w,r,p:pa});
+  if(r>0)S.rate=r;S.xp=pa;
+  const nd=new Date(s);view=new Date(nd.getFullYear(),nd.getMonth(),1);
+  save();$('xdlg').close();render();
+};
+$('xrows').addEventListener('pointerdown',e=>{
+  const row=e.target.closest('.row');if(!row)return;
+  sw={row,x:e.clientX,y:e.clientY,dx:0,on:false,ex:true,id:+row.parentNode.dataset.id};
+});
+$('xrows').addEventListener('click',ev=>{
+  if(Date.now()-lastSwipe<400)return;
+  const r=ev.target.closest('.row');if(r)openX(+r.dataset.xid);
+});
+const num=n=>n.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2}).replace(/[\u202f\u00a0]/g,' ');
+function xData(y,m,cur){
+  const list=S.extras.filter(x=>{const d=new Date(x.s);return d.getFullYear()==y&&d.getMonth()==m}).sort((a,b)=>a.s-b.s);
+  let mins=0,tot=0;
+  const rows=list.map(x=>{mins+=xmin(x);tot+=xamt(x);
+    return[new Date(x.s).toLocaleDateString('fr-FR',{weekday:'short',day:'2-digit',month:'2-digit'}),x.d||'-',hm(x.s)+'-'+hm(x.e),(x.p||0)+' min',fm(xmin(x)),num(x.r||0)+' '+cur+'/h',num(xamt(x))+' '+cur]});
+  return{rows,mins,tot:num(tot)+' '+cur,n:list.length};
+}
+function makePdfX(y,m){
+  const D=xData(y,m,'EUR'),doc=new window.jspdf.jsPDF({unit:'mm',format:'a4'});
+  const X=[15,38,96,120,140,163,195],A=['left','left','center','center','center','center','right'],H=['Date','Pour qui','Horaires','Pause','Durée','Taux net','Montant net'];
+  doc.setFont('helvetica','bold');doc.setFontSize(18);doc.text('Récapitulatif des extras',15,20);
+  doc.setFont('helvetica','normal');doc.setFontSize(12);doc.setTextColor(110);doc.text(mLabel(y,m),15,27);
+  let yy=38;
+  const head=()=>{doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(90);H.forEach((h,i)=>doc.text(h,X[i],yy,{align:A[i]}));doc.setDrawColor(150);doc.line(15,yy+2.5,195,yy+2.5);yy+=9};
+  const body=()=>{doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(0)};
+  head();body();
+  if(!D.rows.length)doc.text('Aucun extra ce mois-ci.',15,yy);
+  D.rows.forEach(r=>{
+    if(yy>275){doc.addPage();yy=20;head();body()}
+    r.forEach((c,i)=>doc.text(i==1?doc.splitTextToSize(String(c),40)[0]:String(c),X[i],yy,{align:A[i]}));
+    doc.setDrawColor(225);doc.line(15,yy+2.5,195,yy+2.5);yy+=8;
+  });
+  yy+=4;doc.setFont('helvetica','bold');doc.setFontSize(12);doc.setDrawColor(0);doc.line(15,yy-5,195,yy-5);
+  doc.text('Total',15,yy);doc.text(D.n+' extra(s)',38,yy);doc.text(fm(D.mins),140,yy,{align:'center'});doc.text(D.tot,195,yy,{align:'right'});
+  return new File([doc.output('blob')],'Recap-extras-'+mKey(y,m)+'.pdf',{type:'application/pdf'});
+}
+$('xPdf').onclick=async()=>{
+  if(!window.jspdf){info("Le module PDF n'a pas pu se charger (vérifie ta connexion).");return}
+  const f=makePdfX(vY(),vM());
+  if(navigator.canShare&&navigator.canShare({files:[f]})){
+    try{await navigator.share({files:[f],title:'Récap extras '+mLabel(vY(),vM()),text:S.email?'À envoyer à : '+S.email:''})}catch(e){}
+    return;
+  }
+  info("Le partage de fichier n'est pas disponible dans ce navigateur. Utilise « Envoyer par mail ».");
+};
+$('xMail').onclick=async()=>{
+  if(!S.email||!S.email.includes('@')){info("Enregistre d'abord une adresse e-mail valide dans l'onglet Heures.");return}
+  const D=xData(vY(),vM(),'€'),L=mLabel(vY(),vM());
+  const F='font-family:-apple-system,Helvetica,Arial,sans-serif;';
+  const th='padding:8px 10px;background:#f2f2f7;border-bottom:1px solid #c7c7cc;text-align:center;font-weight:600';
+  const td='padding:7px 10px;border-bottom:1px solid #e5e5ea;text-align:center';
+  const tt=td+';font-weight:700;border-top:2px solid #000';
+  let h='<p style="'+F+'font-size:16px"><b>Récapitulatif des extras - '+L+'</b></p><table style="border-collapse:collapse;'+F+'font-size:13px"><tr>'+['Date','Pour qui','Horaires','Pause','Durée','Taux net','Montant net'].map(x=>'<th style="'+th+'">'+x+'</th>').join('')+'</tr>';
+  D.rows.forEach(r=>{h+='<tr>'+r.map((c,i)=>'<td style="'+td+(i==6?';font-weight:600':'')+(i==1?';text-align:left':'')+'">'+esc(c)+'</td>').join('')+'</tr>'});
+  h+='<tr><td style="'+tt+'">Total</td><td style="'+tt+';text-align:left" colspan="3">'+D.n+' extra(s)</td><td style="'+tt+'">'+fm(D.mins)+'</td><td style="'+tt+'"></td><td style="'+tt+'">'+esc(D.tot)+'</td></tr></table>';
+  let b='Récapitulatif des extras - '+L+'\n\nDate | Pour qui | Horaires | Pause | Durée | Taux | Montant\n';
+  D.rows.forEach(r=>b+=r.join(' | ')+'\n');
+  b+='\nTotal : '+D.n+' extra(s) - '+fm(D.mins)+' - '+D.tot+'\n';
+  const rich=typeof ClipboardItem!=='undefined'&&navigator.clipboard&&navigator.clipboard.write;
+  const ok=await ask(rich?'Le tableau va être copié. Une fois dans Mail, touche le message, puis choisis « Coller ».':'Le tableau sera écrit en texte dans le message.','Ouvrir Mail');
+  if(!ok)return;
+  let used=false;
+  if(rich){try{navigator.clipboard.write([new ClipboardItem({'text/html':new Blob([h],{type:'text/html'}),'text/plain':new Blob([b],{type:'text/plain'})})]);used=true}catch(e){}}
+  try{location.href='mailto:'+S.email+'?subject='+encodeURIComponent('Récap extras '+L)+'&body='+encodeURIComponent(used?'':b)}catch(e){info("Impossible d'ouvrir l'app Mail ici.")}
+};
 try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
 function renderBk(){
   $('bkInfo').textContent=S.lastBk?'Dernière sauvegarde : '+new Date(S.lastBk).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})+'.':"Aucune sauvegarde pour l'instant. Si tu effaces les données de Safari, tes heures seront perdues : sauvegarde-les dans Fichiers ou envoie-les-toi.";
@@ -449,8 +611,8 @@ async function doRestore(txt){
   if(!d||!Array.isArray(d.entries)){await info("Ce contenu n'est pas une sauvegarde valide.");return}
   const ok=await ask('Remplacer tes données actuelles par cette sauvegarde ('+d.entries.length+' ligne(s)) ?','Remplacer');
   if(!ok)return;
-  S=Object.assign({entries:[],email:'',rem:true,sent:{},mode:'near'},d);
-  S.tpl=Object.assign({on:true,s:'05:30',e:'14:30',p:60},d.tpl);S.sent=S.sent||{};
+  S=Object.assign({entries:[],extras:[],rate:0,email:'',rem:true,sent:{},mode:'near'},d);
+  S.tpl=Object.assign({on:true,s:'05:30',e:'14:30',p:60},d.tpl);S.sent=S.sent||{};S.extras=S.extras||[];
   S.entries.forEach(x=>{if(x.p==null)x.p=defP()});
   save();$('round').value=S.mode;$('rdlg').close();tick();render();
 }
@@ -465,13 +627,13 @@ if(!standalone&&!S.instOff){
 $('instX').onclick=()=>{S.instOff=true;save();$('inst').classList.add('hide')};
 $('prev').onclick=()=>{view.setMonth(view.getMonth()-1);render()};
 $('next').onclick=()=>{view.setMonth(view.getMonth()+1);render()};
+$('prev3').onclick=$('prev').onclick;$('next3').onclick=$('next').onclick;
 function tab(n){
-  $('ttl').textContent=n==1?'Badgeuse':'Heures';
-  $('p1').classList.toggle('hide',n!=1);$('p2').classList.toggle('hide',n!=2);
-  $('t1').classList.toggle('on',n==1);$('t2').classList.toggle('on',n==2);
-  if(n==2)render();
+  $('ttl').textContent=['','Badgeuse','Heures','Extra'][n];
+  [1,2,3].forEach(i=>{$('p'+i).classList.toggle('hide',n!=i);$('t'+i).classList.toggle('on',n==i)});
+  if(n>1)render();
 }
-$('t1').onclick=()=>tab(1);$('t2').onclick=()=>tab(2);
+$('t1').onclick=()=>tab(1);$('t2').onclick=()=>tab(2);$('t3').onclick=()=>tab(3);
 tick();setInterval(tick,1000);render();
 </script>
 </body>
